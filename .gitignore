@@ -1,2 +1,11 @@
 /cmake-build-debug/
 /.idea/
+/.vs/
+/lib/
+/Packages/
+/x64/
+ThreadPool.sln
+ThreadPool.vcxproj
+ThreadPool.vcxproj.filters
+ThreadPool.vcxproj.user
+CMakeLists.txt
