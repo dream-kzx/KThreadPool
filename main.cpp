@@ -22,7 +22,9 @@ int TestReturn(int num) {
 
 int main() {
   setbuf(stdout, nullptr);
-  ThreadPool myThreadPool(3, 8, 1000, 100);
+  KZX::ThreadPool myThreadPool(3, 8, 1000, 100);
+
+  printf("cpu的核心数为：%d\n",KZX::get_cpu_cors());
 
   for (int i = 0; i < 60; i++) {
     myThreadPool.AddTask(TestInt, i);
@@ -41,11 +43,10 @@ int main() {
   }
 
   for (auto &v : futures) {
-    printf("%d", v.get());
+    printf("%d\n", v.get());
   }
 
   myThreadPool.Wait();
-  myThreadPool.AddTask(TestString,std::to_string(1));
 
   return 0;
 }

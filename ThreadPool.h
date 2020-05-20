@@ -15,6 +15,7 @@
 #include <typeinfo>
 #include <vector>
 
+namespace KZX {
 class ThreadPool {
  public:
   ThreadPool();
@@ -80,7 +81,7 @@ class ThreadPool {
 
 template<class F, class... Args>
 void ThreadPool::AddTask(F &&f, Args &&... args) {
-  if (stopped_.load() || wait_status_.load()){
+  if (stopped_.load() || wait_status_.load()) {
     throw std::runtime_error("线程池结束后，再次向线程池加入任务");
   }
   auto task = std::bind(std::forward<F>(f), std::forward<Args>(args)...);
@@ -96,9 +97,10 @@ void ThreadPool::AddTask(F &&f, Args &&... args) {
 
 template<class F, class... Args>
 auto ThreadPool::AddTaskAndResult(F &&f,
-                                  Args &&... args) -> std::future<decltype(f(args...))> {
+                                  Args &&... args) -> std::future<decltype(f(
+    args...))> {
 
-  if (stopped_.load() || wait_status_.load()){
+  if (stopped_.load() || wait_status_.load()) {
     throw std::runtime_error("线程池结束后，再次向线程池加入任务");
   }
 
@@ -119,4 +121,7 @@ auto ThreadPool::AddTaskAndResult(F &&f,
   cond_.notify_one();
   return res;
 }
+
+int get_cpu_cors();
+}//namespace KZX
 #endif //THREADPOOL_THREADPOOL_H

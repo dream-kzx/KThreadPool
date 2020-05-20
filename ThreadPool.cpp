@@ -3,7 +3,13 @@
 //
 
 #include "ThreadPool.h"
+#if defined(_WIN32)
+#include <Windows.h>
+#elif defined(LINUX)
+#include <unistd.h>
+#endif
 
+namespace KZX {
 ThreadPool::ThreadPool()
     : kMaxThreadSize(5),
       kMinThreadSize(2),
@@ -150,3 +156,15 @@ void ThreadPool::Stop() {
     if (th.joinable()) th.join();
   }
 }
+
+//获取CPU的核心数
+int get_cpu_cors() {
+#if defined(_WIN32)
+  SYSTEM_INFO info;
+  GetSystemInfo(&info);
+  return info.dwNumberOfProcessors;
+#elif defined(LINUX)
+  return get_nprocs();
+#endif
+}
+}//namespace KZX
