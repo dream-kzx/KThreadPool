@@ -24,8 +24,6 @@ int main() {
   setbuf(stdout, nullptr);
   KZX::ThreadPool myThreadPool(3, 8, 1000, 100);
 
-  printf("cpu的核心数为：%d\n",KZX::get_cpu_cors());
-
   for (int i = 0; i < 60; i++) {
     myThreadPool.AddTask(TestInt, i);
   }

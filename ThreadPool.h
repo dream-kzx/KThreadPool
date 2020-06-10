@@ -1,7 +1,3 @@
-//
-// Created by lookupman on 2020/5/18.
-//
-
 #ifndef THREADPOOL_THREADPOOL_H
 #define THREADPOOL_THREADPOOL_H
 
@@ -26,15 +22,11 @@ class ThreadPool {
 
   ThreadPool(ThreadPool &&) = delete;
 
+  ~ThreadPool();
+
   ThreadPool &operator=(const ThreadPool &) = delete;
 
   ThreadPool &operator=(ThreadPool &&) = delete;
-
-  ~ThreadPool() {
-    if (!stopped_.load()) {
-      Stop();
-    }
-  }
 
   template<class F, class... Args>
   void AddTask(F &&f, Args &&... args);
@@ -43,13 +35,17 @@ class ThreadPool {
   auto AddTaskAndResult(F &&f,
                         Args &&... args) -> std::future<decltype(f(args...))>;
 
-  bool get_stopped() { return stopped_.load(); }
+  bool get_stopped() { return stopped_; }
 
   int get_current_thread_size() { return current_thread_size_.load(); }
 
   void Wait();
 
  private:
+  using Func = std::function<void()>;
+  const int kMaxThreadSize;
+  const int kMinThreadSize;
+
   void Init();
 
   void CreateThread();
@@ -58,34 +54,29 @@ class ThreadPool {
 
   void Stop();
 
- private:
-  const int kMaxThreadSize;
-  const int kMinThreadSize;
   int thread_timeout_;
   int watch_timeout_;
 
   std::atomic<int> current_thread_size_;
   std::atomic<int> idle_thread_size_;
-  std::atomic<int> current_task_size_;
-  std::atomic<bool> stopped_;
-  std::atomic<bool> wait_status_;
+  int current_task_size_;
+  bool stopped_;
+  bool wait_status_;
 
   std::condition_variable cond_;
   std::mutex task_mutex_;
   std::mutex thread_mutex_;
   std::vector<std::thread> threads_;
-
-  using Func = std::function<void()>;
   std::queue<Func> tasks_;
 };
 
 template<class F, class... Args>
 void ThreadPool::AddTask(F &&f, Args &&... args) {
-  if (stopped_.load() || wait_status_.load()) {
+  if (stopped_ || wait_status_) {
     throw std::runtime_error("线程池结束后，再次向线程池加入任务");
   }
-  auto task = std::bind(std::forward<F>(f), std::forward<Args>(args)...);
 
+  auto task = std::bind(std::forward<F>(f), std::forward<Args>(args)...);
   {
     std::lock_guard<std::mutex> task_lock(task_mutex_);
     current_task_size_++;
@@ -100,7 +91,7 @@ auto ThreadPool::AddTaskAndResult(F &&f,
                                   Args &&... args) -> std::future<decltype(f(
     args...))> {
 
-  if (stopped_.load() || wait_status_.load()) {
+  if (stopped_ || wait_status_) {
     throw std::runtime_error("线程池结束后，再次向线程池加入任务");
   }
 
@@ -122,6 +113,5 @@ auto ThreadPool::AddTaskAndResult(F &&f,
   return res;
 }
 
-int get_cpu_cors();
 }//namespace KZX
 #endif //THREADPOOL_THREADPOOL_H

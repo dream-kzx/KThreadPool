@@ -1,13 +1,4 @@
-//
-// Created by lookupman on 2020/5/18.
-//
-
 #include "ThreadPool.h"
-#if defined(_WIN32)
-#include <Windows.h>
-#elif defined(LINUX)
-#include <unistd.h>
-#endif
 
 namespace KZX {
 ThreadPool::ThreadPool()
@@ -38,7 +29,7 @@ ThreadPool::ThreadPool(int min, int max, int thread_timeout, int watch_timeout)
       stopped_(false),
       wait_status_(false) {
   if (min > max) {
-    stopped_.store(true);
+    stopped_ = true;
     return;
   }
   if (thread_timeout < 0) thread_timeout_ = 1000;
@@ -47,14 +38,20 @@ ThreadPool::ThreadPool(int min, int max, int thread_timeout, int watch_timeout)
   Init();
 };
 
+ThreadPool::~ThreadPool() {
+  if (!stopped_) {
+    Stop();
+  }
+}
+
 //等待线程池所有任务（包括任务队列）执行完毕
 void ThreadPool::Wait() {
-  wait_status_.store(true);
+  wait_status_ = true;
   for (;;) {
-    if (current_task_size_.load() == 0) {
+    if (current_task_size_ == 0) {
       Stop();
     }
-    if (current_task_size_.load() == 0 && current_thread_size_ == 0) {
+    if (current_task_size_ == 0 && current_thread_size_ == 0) {
       break;
     }
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -66,14 +63,9 @@ void ThreadPool::Init() {
   for (int i = 0; i < kMinThreadSize; ++i) {
     std::lock_guard<std::mutex> thread_lock(thread_mutex_);
     if (current_thread_size_ < kMinThreadSize) {
-      current_thread_size_++;
-      idle_thread_size_++;
-#ifdef DEBUG
-      printf(
-          "                                             "
-          "(创建线程)当前线程数为：%d\n",
-          current_thread_size_.load());
-#endif
+      ++current_thread_size_;
+      ++idle_thread_size_;
+
       threads_.emplace_back([this] { CreateThread(); });
     } else {
       break;
@@ -92,8 +84,8 @@ void ThreadPool::CreateThread() {
       //在线程池停止，任务队列不为空或者超时的情况下，唤醒
       cond_.wait_for(task_lock,
                      std::chrono::milliseconds(thread_timeout_),
-                     [this] { return stopped_.load() || !tasks_.empty(); });
-      if (stopped_.load()) {  //如果线程池关闭，则跳出循环
+                     [this] { return stopped_ || !tasks_.empty(); });
+      if (stopped_) {  //如果线程池关闭，则跳出循环
         break;
       } else if (!tasks_.empty()) {  //如果任务队列不为空，则进入下一次循环
         continue;
@@ -102,46 +94,34 @@ void ThreadPool::CreateThread() {
           break;
         }
       }
-    } else if (stopped_.load()) {  //如果线程池关闭，则跳出循环
+    } else if (stopped_) {  //如果线程池关闭，则跳出循环
       break;
     } else if (!tasks_.empty()) {  //如果任务队列不为空，则获取任务执行
       auto task = std::move(tasks_.front());
       tasks_.pop();
-      idle_thread_size_--;
-      current_task_size_--;
+      --idle_thread_size_;
+      --current_task_size_;
       task_lock.unlock();
       task();
       task_lock.lock();
-      idle_thread_size_++;
+      ++idle_thread_size_;
     }
   }
 
-  current_thread_size_--;
-  idle_thread_size_--;
-
-#ifdef DEBUG
-  printf(
-      "                                             "
-      "(销毁线程)当前线程数为：%d\n",
-      current_thread_size_.load());
-#endif
+  --current_thread_size_;
+  --idle_thread_size_;
 }
 
 //检测线程，用于动态调度线程池的线程个数
 void ThreadPool::WatchThread() {
-  while (!stopped_.load()) {
+  while (!stopped_) {
     std::lock_guard<std::mutex> thread_lock(thread_mutex_);
     if ((current_thread_size_.load() < kMinThreadSize) ||
-        (current_task_size_.load() > idle_thread_size_.load() &&
+        (current_task_size_ > idle_thread_size_.load() &&
             current_thread_size_.load() < kMaxThreadSize)) {
-      current_thread_size_++;
-      idle_thread_size_++;
-#ifdef DEBUG
-      printf(
-          "                                             "
-          "(创建线程)当前线程数为：%d\n",
-          current_thread_size_.load());
-#endif
+      ++current_thread_size_;
+      ++idle_thread_size_;
+
       threads_.emplace_back([this] { CreateThread(); });
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(watch_timeout_));
@@ -150,21 +130,11 @@ void ThreadPool::WatchThread() {
 
 //停止线程池运行，唤醒所有睡眠进程
 void ThreadPool::Stop() {
-  stopped_.store(true);
+  stopped_ = true;
   cond_.notify_all();
   for (auto &th : threads_) {
     if (th.joinable()) th.join();
   }
 }
 
-//获取CPU的核心数
-int get_cpu_cors() {
-#if defined(_WIN32)
-  SYSTEM_INFO info;
-  GetSystemInfo(&info);
-  return info.dwNumberOfProcessors;
-#elif defined(LINUX)
-  return get_nprocs();
-#endif
-}
 }//namespace KZX
